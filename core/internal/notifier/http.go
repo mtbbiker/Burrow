@@ -30,7 +30,7 @@ import (
 
 // HTTPNotifier is a module which can be used to send notifications of consumer group status via outbound HTTP calls to
 // another server. This is useful for informing another system, such as an alert system, when there is a problem. One
-// HTTP call is made for each consumer group that matches the whitelist/blacklist and the status threshold (though
+// HTTP call is made for each consumer group that matches the allowlist/denylist and the status threshold (though
 // keepalive connections will be used if configured).
 type HTTPNotifier struct {
 	// App is a pointer to the application context. This stores the channel to the storage subsystem
@@ -41,8 +41,8 @@ type HTTPNotifier struct {
 	Log *zap.Logger
 
 	name           string
-	groupWhitelist *regexp.Regexp
-	groupBlacklist *regexp.Regexp
+	groupAllowlist *regexp.Regexp
+	groupDenylist  *regexp.Regexp
 	extras         map[string]string
 	urlOpen        string
 	urlClose       string
@@ -59,7 +59,7 @@ type HTTPNotifier struct {
 // send-close is set to true there must also be a url-close. If these are missing or incorrect, this func will panic
 // with an explanatory message. It is also possible to configure a specific method (such as POST or DELETE) to be used
 // with these URLs, as well as a timeout and keepalive for the HTTP smtpClient.
-func (module *HTTPNotifier) Configure(name string, configRoot string) {
+func (module *HTTPNotifier) Configure(name, configRoot string) {
 	module.name = name
 
 	// Validate and set defaults for profile configs
@@ -126,14 +126,14 @@ func (module *HTTPNotifier) GetName() string {
 	return module.name
 }
 
-// GetGroupWhitelist returns the compiled group whitelist (or nil, if there is not one)
-func (module *HTTPNotifier) GetGroupWhitelist() *regexp.Regexp {
-	return module.groupWhitelist
+// GetGroupAllowlist returns the compiled group allowlist (or nil, if there is not one)
+func (module *HTTPNotifier) GetGroupAllowlist() *regexp.Regexp {
+	return module.groupAllowlist
 }
 
-// GetGroupBlacklist returns the compiled group blacklist (or nil, if there is not one)
-func (module *HTTPNotifier) GetGroupBlacklist() *regexp.Regexp {
-	return module.groupBlacklist
+// GetGroupDenylist returns the compiled group denylist (or nil, if there is not one)
+func (module *HTTPNotifier) GetGroupDenylist() *regexp.Regexp {
+	return module.groupDenylist
 }
 
 // GetLogger returns the configured zap.Logger for this notifier

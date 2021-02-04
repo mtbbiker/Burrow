@@ -53,7 +53,7 @@ type MockModule struct {
 }
 
 // Configure mocks the protocol.Module Configure func
-func (m *MockModule) Configure(name string, configRoot string) {
+func (m *MockModule) Configure(name, configRoot string) {
 	m.Called(name, configRoot)
 }
 
@@ -75,14 +75,14 @@ func (m *MockModule) GetName() string {
 	return args.String(0)
 }
 
-// GetGroupWhitelist mocks the notifier.Module GetGroupWhitelist func
-func (m *MockModule) GetGroupWhitelist() *regexp.Regexp {
+// GetGroupAllowlist mocks the notifier.Module GetGroupAllowlist func
+func (m *MockModule) GetGroupAllowlist() *regexp.Regexp {
 	args := m.Called()
 	return args.Get(0).(*regexp.Regexp)
 }
 
-// GetGroupBlacklist mocks the notifier.Module GetGroupBlacklist func
-func (m *MockModule) GetGroupBlacklist() *regexp.Regexp {
+// GetGroupDenylist mocks the notifier.Module GetGroupDenylist func
+func (m *MockModule) GetGroupDenylist() *regexp.Regexp {
 	args := m.Called()
 	return args.Get(0).(*regexp.Regexp)
 }

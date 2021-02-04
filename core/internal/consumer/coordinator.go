@@ -50,7 +50,7 @@ type Coordinator struct {
 
 // getModuleForClass returns the correct module based on the passed className. As part of the Configure steps, if there
 // is any error, it will panic with an appropriate message describing the problem.
-func getModuleForClass(app *protocol.ApplicationContext, moduleName string, className string) protocol.Module {
+func getModuleForClass(app *protocol.ApplicationContext, moduleName, className string) protocol.Module {
 	logger := app.Logger.With(
 		zap.String("type", "module"),
 		zap.String("coordinator", "consumer"),
@@ -106,6 +106,9 @@ func (cc *Coordinator) Start() error {
 	if err != nil {
 		return errors.New("Error starting consumer module: " + err.Error())
 	}
+	// All consumers started, Burrow is ready to serve requests
+	// set the readiness probe
+	cc.App.AppReady = true
 	return nil
 }
 

@@ -20,15 +20,16 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/linkedin/Burrow/core/internal/helpers"
-	"github.com/linkedin/Burrow/core/protocol"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"gopkg.in/gomail.v2"
+
+	"github.com/linkedin/Burrow/core/internal/helpers"
+	"github.com/linkedin/Burrow/core/protocol"
 )
 
 // EmailNotifier is a module which can be used to send notifications of consumer group status via email messages. One
-// email is sent for each consumer group that matches the whitelist/blacklist and the status threshold.
+// email is sent for each consumer group that matches the allowlist/denylist and the status threshold.
 type EmailNotifier struct {
 	// App is a pointer to the application context. This stores the channel to the storage subsystem
 	App *protocol.ApplicationContext
@@ -38,8 +39,8 @@ type EmailNotifier struct {
 	Log *zap.Logger
 
 	name           string
-	groupWhitelist *regexp.Regexp
-	groupBlacklist *regexp.Regexp
+	groupAllowlist *regexp.Regexp
+	groupDenylist  *regexp.Regexp
 	extras         map[string]string
 	templateOpen   *template.Template
 	templateClose  *template.Template
@@ -54,7 +55,7 @@ type EmailNotifier struct {
 // Configure validates the configuration of the email notifier. At minimum, there must be a valid server, port, from
 // address, and to address. If any of these are missing or incorrect, this func will panic with an explanatory message.
 // It is also possible to specify an auth-type of either "plain" or "crammd5", along with a username and password.
-func (module *EmailNotifier) Configure(name string, configRoot string) {
+func (module *EmailNotifier) Configure(name, configRoot string) {
 	module.name = name
 
 	// Abstract the SendMail call so we can test
@@ -139,14 +140,14 @@ func (module *EmailNotifier) GetName() string {
 	return module.name
 }
 
-// GetGroupWhitelist returns the compiled group whitelist (or nil, if there is not one)
-func (module *EmailNotifier) GetGroupWhitelist() *regexp.Regexp {
-	return module.groupWhitelist
+// GetGroupAllowlist returns the compiled group allowlist (or nil, if there is not one)
+func (module *EmailNotifier) GetGroupAllowlist() *regexp.Regexp {
+	return module.groupAllowlist
 }
 
-// GetGroupBlacklist returns the compiled group blacklist (or nil, if there is not one)
-func (module *EmailNotifier) GetGroupBlacklist() *regexp.Regexp {
-	return module.groupBlacklist
+// GetGroupDenylist returns the compiled group denylist (or nil, if there is not one)
+func (module *EmailNotifier) GetGroupDenylist() *regexp.Regexp {
+	return module.groupDenylist
 }
 
 // GetLogger returns the configured zap.Logger for this notifier
@@ -250,6 +251,6 @@ func (module *EmailNotifier) createMessage(messageContent string) (*gomail.Messa
 	return m, nil
 }
 
-func getKeywordContent(header string, subjectDelimiter string) string {
+func getKeywordContent(header, subjectDelimiter string) string {
 	return strings.Split(header, subjectDelimiter)[1]
 }

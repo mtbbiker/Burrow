@@ -15,6 +15,9 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/Shopify/sarama"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/mock"
@@ -51,10 +54,13 @@ var kafkaVersions = map[string]sarama.KafkaVersion{
 	"2.2.0":    sarama.V2_2_0_0,
 	"2.2.1":    sarama.V2_2_0_0,
 	"2.3.0":    sarama.V2_3_0_0,
+	"2.4.0":    sarama.V2_4_0_0,
+	"2.5.0":    sarama.V2_5_0_0,
+	"2.6.0":    sarama.V2_6_0_0,
 }
 
 func parseKafkaVersion(kafkaVersion string) sarama.KafkaVersion {
-	version, ok := kafkaVersions[string(kafkaVersion)]
+	version, ok := kafkaVersions[kafkaVersion]
 	if !ok {
 		panic("Unknown Kafka Version: " + kafkaVersion)
 	}
@@ -109,7 +115,6 @@ func GetSaramaConfigFromClientProfile(profileName string) *sarama.Config {
 					panic("cannot read TLS certificate or key file: " + err.Error())
 				}
 				saramaConfig.Net.TLS.Config.Certificates = []tls.Certificate{cert}
-				saramaConfig.Net.TLS.Config.BuildNameToCertificate()
 			}
 		}
 		saramaConfig.Net.TLS.Config.InsecureSkipVerify = viper.GetBool("tls." + tlsName + ".noverify")
@@ -120,6 +125,18 @@ func GetSaramaConfigFromClientProfile(profileName string) *sarama.Config {
 		saslName := viper.GetString(configRoot + ".sasl")
 
 		saramaConfig.Net.SASL.Enable = true
+		mechanism := viper.GetString("sasl." + saslName + ".mechanism")
+		if mechanism == "SCRAM-SHA-256" {
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+			saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &XDGSCRAMClient{HashGeneratorFcn: SHA256}
+			}
+		} else if mechanism == "SCRAM-SHA-512" {
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+			saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
+				return &XDGSCRAMClient{HashGeneratorFcn: SHA512}
+			}
+		}
 		saramaConfig.Net.SASL.Handshake = viper.GetBool("sasl." + saslName + ".handshake-first")
 		saramaConfig.Net.SASL.User = viper.GetString("sasl." + saslName + ".username")
 		saramaConfig.Net.SASL.Password = viper.GetString("sasl." + saslName + ".password")
@@ -526,4 +543,15 @@ func (m *MockSaramaPartitionConsumer) Errors() <-chan *sarama.ConsumerError {
 func (m *MockSaramaPartitionConsumer) HighWaterMarkOffset() int64 {
 	args := m.Called()
 	return args.Get(0).(int64)
+}
+
+func newSaramaZapLogger(logger *zap.Logger) sarama.StdLogger {
+	sl, _ := zap.NewStdLogAt(logger.With(zap.String("name", "sarama")), zapcore.DebugLevel)
+	return sl
+}
+
+// InitSaramaLogging assigns a new logger to sarama.Logger, which
+// will send messages to given zap logger at debug level
+func InitSaramaLogging(logger *zap.Logger) {
+	sarama.Logger = newSaramaZapLogger(logger)
 }

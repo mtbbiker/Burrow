@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"testing"
 	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"testing"
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -50,7 +50,7 @@ func fixtureCoordinator() *Coordinator {
 
 	viper.Reset()
 	viper.Set("notifier.test.class-name", "null")
-	viper.Set("notifier.test.group-whitelist", ".*")
+	viper.Set("notifier.test.group-allowlist", ".*")
 	viper.Set("notifier.test.threshold", 1)
 	viper.Set("notifier.test.interval", 5)
 	viper.Set("notifier.test.timeout", 2)
@@ -105,7 +105,7 @@ func TestCoordinator_Configure_TwoModules(t *testing.T) {
 
 func TestCoordinator_Configure_BadRegexp(t *testing.T) {
 	coordinator := fixtureCoordinator()
-	viper.Set("notifier.test.group-whitelist", "[")
+	viper.Set("notifier.test.group-allowlist", "[")
 
 	assert.Panics(t, func() { coordinator.Configure() }, "The code did not panic")
 }
@@ -475,6 +475,7 @@ var notifyModuleTests = []struct {
 	ExpectSend  bool
 	ExpectClose bool
 	ExpectID    bool
+	SendOnce    bool
 }{
 	/*{1, 0, false, false, false, false, false},
 	{2, 0, false, false, false, false, false},
@@ -482,25 +483,27 @@ var notifyModuleTests = []struct {
 	{1, 0, false, true, false, false, false},
 	{1, 0, true, true, false, false, false}, */
 
-	{1, 1, false, false, true, false, false},
-	{1, 1, false, true, true, false, false},
-	{1, 1, true, false, true, false, false},
-	{1, 1, true, true, true, true, false},
+	{1, 1, false, false, true, false, false, false},
+	{1, 1, false, true, true, false, false, false},
+	{1, 1, true, false, true, false, false, false},
+	{1, 1, true, true, true, true, false, true},
 
-	{1, 2, false, false, true, false, true},
-	{1, 2, false, true, true, false, true},
-	{1, 2, true, false, true, false, true},
-	{1, 2, true, true, true, false, true},
+	{1, 2, false, false, true, false, true, false},
+	{1, 2, false, true, true, false, true, false},
+	{1, 2, true, false, true, false, true, false},
+	{1, 2, true, true, true, false, true, false},
+	{1, 2, true, true, false, false, true, true},
+	{1, 2, false, true, true, false, true, true},
 
-	{3, 2, false, false, false, false, true},
-	{3, 2, false, true, false, false, true},
-	{3, 2, true, false, false, false, true},
-	{3, 2, true, true, false, false, true},
+	{3, 2, false, false, false, false, true, false},
+	{3, 2, false, true, false, false, true, false},
+	{3, 2, true, false, false, false, true, false},
+	{3, 2, true, true, false, false, true, false},
 
-	{2, 1, false, false, false, false, false},
-	{2, 1, false, true, false, false, false},
-	{2, 1, true, false, false, false, false},
-	{2, 1, true, true, true, true, false},
+	{2, 1, false, false, false, false, false, false},
+	{2, 1, false, true, false, false, false, false},
+	{2, 1, true, false, false, false, false, false},
+	{2, 1, true, true, true, true, false, false},
 }
 
 func TestCoordinator_checkAndSendResponseToModules(t *testing.T) {
@@ -529,10 +532,16 @@ func TestCoordinator_checkAndSendResponseToModules(t *testing.T) {
 		viper.Reset()
 		viper.Set("notifier.test.threshold", testSet.Threshold)
 		viper.Set("notifier.test.send-close", testSet.SendClose)
+		viper.Set("notifier.test.send-once", testSet.SendOnce)
 
 		// Should there be an existing incident for this test?
 		group := coordinator.clusters["testcluster"].Groups["testgroup"]
-		delete(group.LastNotify, "test")
+		if testSet.SendOnce && !testSet.ExpectSend {
+			group.LastNotify["test"] = time.Now()
+		} else {
+			delete(group.LastNotify, "test")
+		}
+
 		if testSet.Existing {
 			group.ID = "testidstring"
 			group.Start = mockStartTime
@@ -554,8 +563,8 @@ func TestCoordinator_checkAndSendResponseToModules(t *testing.T) {
 		mockModule := &helpers.MockModule{}
 		coordinator.modules["test"] = mockModule
 		mockModule.On("GetName").Return("test")
-		mockModule.On("GetGroupWhitelist").Return((*regexp.Regexp)(nil))
-		mockModule.On("GetGroupBlacklist").Return((*regexp.Regexp)(nil))
+		mockModule.On("GetGroupAllowlist").Return((*regexp.Regexp)(nil))
+		mockModule.On("GetGroupDenylist").Return((*regexp.Regexp)(nil))
 		mockModule.On("AcceptConsumerGroup", response).Return(true)
 		if testSet.ExpectSend {
 			mockModule.On("Notify", response, mock.MatchedBy(func(s string) bool { return true }), mock.MatchedBy(func(t time.Time) bool { return true }), testSet.ExpectClose).Return()
@@ -568,7 +577,7 @@ func TestCoordinator_checkAndSendResponseToModules(t *testing.T) {
 		mockModule.AssertExpectations(t)
 		if testSet.ExpectSend && (!testSet.ExpectClose) {
 			assert.Falsef(t, group.LastNotify["test"].IsZero(), "Test %v: Expected group last time to be set", i)
-		} else {
+		} else if !testSet.SendOnce {
 			assert.Truef(t, group.LastNotify["test"].IsZero(), "Test %v: Expected group last time to remain unset", i)
 		}
 

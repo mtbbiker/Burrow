@@ -60,6 +60,9 @@ type ApplicationContext struct {
 	// This is the channel over which any module should send storage requests for storage of offsets and group
 	// information, or to fetch the same information. It is serviced by the storage Coordinator.
 	StorageChannel chan *StorageRequest
+
+	// This is a boolean flag which is set by the last subsystem, the consumer, in order to signal when Burrow is ready
+	AppReady bool
 }
 
 // Module is a common interface for all modules so that they can be manipulated by the coordinators in the same way.
@@ -141,13 +144,17 @@ type ZookeeperClient interface {
 	// the children of the specified path, providing an event channel that will receive a message when the watch fires
 	GetW(path string) ([]byte, *zk.Stat, <-chan zk.Event, error)
 
+	// For the given path in Zookeeper, return a boolean stating whether or not the node exists.
+	// The method does not set watch on the node, but verifies existence of a node to avoid authentication error.
+	Exists(path string) (bool, *zk.Stat, error)
+
 	// For the given path in Zookeeper, return a boolean stating whether or not the node exists. This method also sets
 	// a watch on the node (exists if it does not currently exist, or a data watch otherwise), providing an event
 	// channel that will receive a message when the watch fires
 	ExistsW(path string) (bool, *zk.Stat, <-chan zk.Event, error)
 
 	// Create makes a new ZNode at the specified path with the contents set to the data byte-slice. Flags can be
-	// provided to specify that this is an ephemeral or sequence node, and an ACL must be provided. If no ACL is\
+	// provided to specify that this is an ephemeral or sequence node, and an ACL must be provided. If no ACL is
 	// desired, specify
 	//  zk.WorldACL(zk.PermAll)
 	Create(string, []byte, int32, []zk.ACL) (string, error)
